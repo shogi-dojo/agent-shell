@@ -10009,5 +10009,39 @@ at or after point, which puts diagnostics from other lines at point."
                  (lambda (&optional _beg _end) (list diagnostic))))
         (should-not (agent-shell--get-flymake-error-context))))))
 
+(ert-deftest agent-shell-cache-dir-creates-missing-directory-test ()
+  "A missing cache directory, parents included, is created and returned."
+  (let* ((base (make-temp-file "agent-shell-cache" t))
+         (process-environment (cons (concat "XDG_CACHE_HOME=" base)
+                                    process-environment)))
+    (unwind-protect
+        (let ((dir (agent-shell-cache-dir "content" "nested")))
+          (should (equal dir (file-name-concat base "agent-shell" "content" "nested")))
+          (should (file-directory-p dir)))
+      (delete-directory base t))))
+
+(ert-deftest agent-shell-cache-dir-skips-make-directory-when-present-test ()
+  "An existing cache directory is not created again on later calls."
+  (let* ((base (make-temp-file "agent-shell-cache" t))
+         (process-environment (cons (concat "XDG_CACHE_HOME=" base)
+                                    process-environment))
+         (creations 0))
+    (unwind-protect
+        (progn
+          (agent-shell-cache-dir "content")
+          (cl-letf* ((original (symbol-function 'make-directory))
+                     ((symbol-function 'make-directory)
+                      (lambda (&rest args)
+                        (setq creations (1+ creations))
+                        (apply original args))))
+            (dotimes (_ 5)
+              (agent-shell-cache-dir "content"))
+            (should (= creations 0))
+            ;; Removing the directory makes the next call recreate it.
+            (delete-directory (agent-shell-cache-dir "content") t)
+            (should (file-directory-p (agent-shell-cache-dir "content")))
+            (should (= creations 1))))
+      (delete-directory base t))))
+
 (provide 'agent-shell-tests)
 ;;; agent-shell-tests.el ends here
