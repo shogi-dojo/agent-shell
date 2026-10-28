@@ -805,7 +805,7 @@ PREVIEW-OPEN says whether it is currently open."
      ;; The same glyph every fold in the buffer uses, and no navigable
      ;; property, so TAB passes over it to the next option.
      (concat " " (agent-shell-elicitation--make-control
-                  :text (if preview-open "▼" "▶")
+                  :text (agent-shell-ui-fold-glyph (not preview-open))
                   :id id :key (map-elt field :key) :value value
                   :action 'preview :navigable nil
                   :help preview

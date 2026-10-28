@@ -5943,6 +5943,23 @@ and blocks a naive substitution."
     (should (string-match-p "So the user wants\\.\\.\\." collapsed))
     (should (equal collapsed expanded))))
 
+(ert-deftest agent-shell-fold-indicators-are-configurable ()
+  "Folds draw `agent-shell-ui-fold-indicators', and copying expands them."
+  (let ((agent-shell-ui-fold-indicators '(">" . "v")))
+    (with-temp-buffer
+      (agent-shell-ui-mode 1)
+      (agent-shell-ui-update-fragment
+       (agent-shell-ui-make-fragment-model
+        :namespace-id "ns" :block-id "1"
+        :label-left "Thought" :body "So the user wants...")
+       :expanded nil :navigation 'always)
+      (should (string-match-p "\\`\n*> Thought" (buffer-string)))
+      (should (eq (get-text-property (1+ (string-match ">" (buffer-string))) 'face)
+                  'agent-shell-ui-fold-indicator))
+      (should (string-match-p "v Thought"
+                              (agent-shell--filter-buffer-substring
+                               (point-min) (point-max)))))))
+
 (ert-deftest agent-shell-filter-buffer-substring-keeps-agent-authored-triangles ()
   "Copying leaves a `▶' the agent wrote in its response alone.
 Only glyphs the UI tagged as fold indicators are rewritten."

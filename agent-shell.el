@@ -2621,17 +2621,17 @@ mouse selection or a kill where mark > point) is normalized."
     ;; buffer lands here, prompt edits included.  Indicators carry `read-only',
     ;; which travels with the text into the temp buffer and would otherwise
     ;; block `replace-match'.
-    (when (string-search "▶" text)
+    (when (string-search (car agent-shell-ui-fold-indicators) text)
       (setq text
             (with-temp-buffer
               (let ((inhibit-read-only t))
                 (insert text)
                 (goto-char (point-min))
-                (while (search-forward "▶" nil t)
+                (while (search-forward (car agent-shell-ui-fold-indicators) nil t)
                   (when (eq (get-text-property (match-beginning 0)
                                                'agent-shell-ui-section)
                             'indicator)
-                    (replace-match "▼" t t)))
+                    (replace-match (cdr agent-shell-ui-fold-indicators) t t)))
                 (buffer-string)))))
     ;; Drop shell-maker's markers, keyed on the property it tags them with
     ;; rather than on their text, so a response that merely mentions
