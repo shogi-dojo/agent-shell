@@ -17,6 +17,11 @@
 ;; Typing also includes redisplay when run in a graphical frame; in batch
 ;; mode it measures insertion and its hooks only.
 ;;
+;; Redisplay numbers include the cost of the frame, the window system, and
+;; every other visible window, none of which depend on the transcript.  Size 0
+;; builds an empty buffer as a control: only a redisplay figure that clearly
+;; exceeds the control's reflects the transcript.
+;;
 ;; Run it headless:
 ;;
 ;;   emacs --batch -Q -L . -L ../acp -L ../shell-maker -L ../compat \
@@ -24,7 +29,7 @@
 ;;
 ;; Environment variables:
 ;;
-;;   AGENT_SHELL_BENCH_SIZES_MB     comma-separated sizes (default "0.5,10")
+;;   AGENT_SHELL_BENCH_SIZES_MB     comma-separated sizes (default "0,0.5,10")
 ;;   AGENT_SHELL_BENCH_MAX_SECONDS  cap per size for building (default 120)
 ;;   AGENT_SHELL_BENCH_OUTPUT       also write the report to this file
 ;;
@@ -61,13 +66,17 @@
           (agent-shell-bench--code-block 20)
           "- first item\n- second item with `code`\n- third item\n"))
 
+(defvar agent-shell-bench-tool-lines 80
+  "Lines of output in each collapsed tool block; 0 builds labels only.")
+
 (defun agent-shell-bench--tool-body (index)
-  "Return a large plain tool output for turn INDEX."
-  (mapconcat
-   (lambda (line)
-     (format "line %d of tool output for call %d: %s" line index
-             (make-string 60 ?x)))
-   (number-sequence 1 80) "\n"))
+  "Return a large plain tool output for turn INDEX, or nil without lines."
+  (when (> agent-shell-bench-tool-lines 0)
+    (mapconcat
+     (lambda (line)
+       (format "line %d of tool output for call %d: %s" line index
+               (make-string 60 ?x)))
+     (number-sequence 1 agent-shell-bench-tool-lines) "\n")))
 
 (defmacro agent-shell-bench--measure (samples &rest body)
   "Run BODY, push its duration in milliseconds onto SAMPLES, return its value."
@@ -95,9 +104,10 @@
             :p99 (funcall pick 0.99)
             :max (aref sorted (1- count))))))
 
-(cl-defun agent-shell-bench-build (target-bytes &key max-seconds)
+(cl-defun agent-shell-bench-build (target-bytes &key max-seconds max-turns)
   "Fill the current buffer with synthetic turns up to TARGET-BYTES characters.
-Stop early after MAX-SECONDS and mark the result truncated.  Return a plist
+Stop early after MAX-TURNS turns, or after MAX-SECONDS and mark the result
+truncated.  Return a plist
 with the turn count, final size, elapsed time, and parse and insert stats."
   (let ((parse-samples nil)
         (insert-samples nil)
@@ -105,7 +115,8 @@ with the turn count, final size, elapsed time, and parse and insert stats."
         (truncated nil)
         (start (float-time))
         (gc-start (list gc-elapsed gcs-done)))
-    (while (and (< (buffer-size) target-bytes) (not truncated))
+    (while (and (< (buffer-size) target-bytes) (not truncated)
+                (or (null max-turns) (< turn max-turns)))
       (cl-incf turn)
       (let* ((namespace (format "bench-%d" turn))
              (parsed (agent-shell-bench--measure parse-samples
@@ -215,15 +226,17 @@ stats, with the insertion and redisplay parts also reported separately under
             (list :insert (agent-shell-bench--stats inserts)
                   :redisplay (agent-shell-bench--stats redisplays)))))
 
-(cl-defun agent-shell-bench-run (size-mb &key max-seconds)
-  "Benchmark one history of SIZE-MB megabytes and return a result plist."
+(cl-defun agent-shell-bench-run (size-mb &key max-seconds max-turns)
+  "Benchmark one history of SIZE-MB megabytes and return a result plist.
+MAX-TURNS, when given, also caps the number of turns built."
   (with-temp-buffer
     (let ((window (and (display-graphic-p)
                        (progn (switch-to-buffer (current-buffer))
                               (selected-window)))))
       (ignore window)
       (let* ((target (floor (* size-mb 1024 1024)))
-             (build (agent-shell-bench-build target :max-seconds max-seconds)))
+             (build (agent-shell-bench-build target :max-seconds max-seconds
+                                              :max-turns max-turns)))
         (append (list :size-mb size-mb
                       :redisplay (and (display-graphic-p) t))
                 build
@@ -266,7 +279,7 @@ stats, with the insertion and redisplay parts also reported separately under
 (defun agent-shell-bench--sizes ()
   "Return the sizes in megabytes requested through the environment."
   (mapcar #'string-to-number
-          (split-string (or (getenv "AGENT_SHELL_BENCH_SIZES_MB") "0.5,10")
+          (split-string (or (getenv "AGENT_SHELL_BENCH_SIZES_MB") "0,0.5,10")
                         "," t "[ \t]+")))
 
 (defun agent-shell-bench--max-seconds ()
