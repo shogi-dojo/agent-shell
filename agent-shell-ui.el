@@ -39,6 +39,33 @@
 (require 'subr-x)
 (require 'text-property-search)
 
+(defcustom agent-shell-ui-fold-indicators '("▶" . "▼")
+  "The glyphs a fold's indicator shows: (COLLAPSED . EXPANDED).
+
+Each is a single character, drawn in `agent-shell-ui-fold-indicator' and
+followed by a space.  For example, nerd-icons' octicon chevrons:
+
+  (setopt agent-shell-ui-fold-indicators \\='(\"\\uf460\" . \"\\uf47c\"))"
+  :type '(cons (string :tag "Collapsed") (string :tag "Expanded"))
+  :group 'agent-shell)
+
+(defface agent-shell-ui-fold-indicator
+  '((t))
+  "Face for the glyph of a fold's indicator, for example to dim it."
+  :group 'agent-shell)
+
+(defun agent-shell-ui-fold-glyph (collapsed)
+  "Return the fold glyph for COLLAPSED from `agent-shell-ui-fold-indicators'.
+It carries `agent-shell-ui-fold-indicator' as its face."
+  (propertize (if collapsed
+                  (car agent-shell-ui-fold-indicators)
+                (cdr agent-shell-ui-fold-indicators))
+              'face 'agent-shell-ui-fold-indicator))
+
+(defun agent-shell-ui--fold-indicator (collapsed)
+  "Return a fold's indicator text for COLLAPSED: its glyph and a space."
+  (concat (agent-shell-ui-fold-glyph collapsed) " "))
+
 (defvar agent-shell-ui-post-expand-fragment-at-point-hook nil
   "Hook run after expanding a fragment at point.
 When run, the buffer is narrowed to the body region and
@@ -999,15 +1026,16 @@ plus its surrounding padding."
                :end)))
 
 (defun agent-shell-ui--set-indicator-collapsed (block collapsed)
-  "Set BLOCK's fold indicator glyph to `▶'/`▼' to match COLLAPSED.
-Both glyphs are two columns wide, so surrounding positions do not shift."
+  "Set BLOCK's fold indicator glyph to match COLLAPSED.
+See `agent-shell-ui-fold-indicators'.  Both indicators are a glyph and a
+space, so surrounding positions do not shift."
   (when-let* ((indicator (agent-shell-ui--nearest-range-matching-property
                           :property 'agent-shell-ui-section :value 'indicator
                           :from (map-elt block :start) :to (map-elt block :end)))
               (props (text-properties-at (map-elt indicator :start))))
     (delete-region (map-elt indicator :start) (map-elt indicator :end))
     (goto-char (map-elt indicator :start))
-    (insert (if collapsed "▶ " "▼ "))
+    (insert (agent-shell-ui--fold-indicator collapsed))
     (add-text-properties (map-elt indicator :start) (point) props)))
 
 (defun agent-shell-ui--apply-own-collapsed (block-start)
@@ -1095,7 +1123,7 @@ indents a child's header line under its group header."
             (setq collapsable (and body has-labels))
             (setq indicator-start (point))
             (insert (agent-shell-ui-make-foldable-text
-                     :text (if expanded "▼ " "▶ ")
+                     :text (agent-shell-ui--fold-indicator (not expanded))
                      :hint "toggle"))
             (setq indicator-end (point))
             (add-text-properties indicator-start indicator-end
@@ -1345,7 +1373,7 @@ state-property range first.  User-facing toggling goes through
         (delete-region (map-elt indicator :start)
                        (map-elt indicator :end))
         (goto-char (map-elt indicator :start))
-        (insert (if new-collapsed-state "▶ " "▼ "))
+        (insert (agent-shell-ui--fold-indicator new-collapsed-state))
         ;; Update state
         (add-text-properties (map-elt indicator :start)
                              (point) indicator-properties)

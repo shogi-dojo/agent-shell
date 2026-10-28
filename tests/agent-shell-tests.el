@@ -4839,6 +4839,32 @@ instead."
           (should (assq :session-id model))
           (should-not (map-elt model :session-id)))))))
 
+(ert-deftest agent-shell--make-header-model-font-family-test ()
+  "Test `agent-shell-header-font-family' overrides the default face's family."
+  (with-temp-buffer
+    (setq-local agent-shell--state
+                `((:agent-config . ((:buffer-name . "Claude Code")
+                                    (:icon-name . nil)))
+                  (:session . ((:id . "test-session-id")
+                               (:model-id . nil)
+                               (:models . nil)
+                               (:mode-id . nil)
+                               (:modes . nil)))))
+    (cl-letf (((symbol-function 'agent-shell--state)
+               (lambda () agent-shell--state))
+              ((symbol-function 'agent-shell--context-usage-indicator)
+               (lambda () nil))
+              ((symbol-function 'agent-shell--busy-indicator-frame)
+               (lambda () nil)))
+      (let ((agent-shell-header-font-family nil))
+        (should (equal (map-elt (agent-shell--make-header-model agent-shell--state)
+                                :font-family)
+                       (face-attribute 'default :family))))
+      (let ((agent-shell-header-font-family "Inter"))
+        (should (equal (map-elt (agent-shell--make-header-model agent-shell--state)
+                                :font-family)
+                       "Inter"))))))
+
 (ert-deftest agent-shell--make-header-text-includes-session-id-test ()
   "Test `agent-shell--make-header' text mode includes session ID."
   (with-temp-buffer
@@ -5942,6 +5968,23 @@ and blocks a naive substitution."
     (should (string-match-p "▼ Thought" collapsed))
     (should (string-match-p "So the user wants\\.\\.\\." collapsed))
     (should (equal collapsed expanded))))
+
+(ert-deftest agent-shell-fold-indicators-are-configurable ()
+  "Folds draw `agent-shell-ui-fold-indicators', and copying expands them."
+  (let ((agent-shell-ui-fold-indicators '(">" . "v")))
+    (with-temp-buffer
+      (agent-shell-ui-mode 1)
+      (agent-shell-ui-update-fragment
+       (agent-shell-ui-make-fragment-model
+        :namespace-id "ns" :block-id "1"
+        :label-left "Thought" :body "So the user wants...")
+       :expanded nil :navigation 'always)
+      (should (string-match-p "\\`\n*> Thought" (buffer-string)))
+      (should (eq (get-text-property (1+ (string-match ">" (buffer-string))) 'face)
+                  'agent-shell-ui-fold-indicator))
+      (should (string-match-p "v Thought"
+                              (agent-shell--filter-buffer-substring
+                               (point-min) (point-max)))))))
 
 (ert-deftest agent-shell-filter-buffer-substring-keeps-agent-authored-triangles ()
   "Copying leaves a `▶' the agent wrote in its response alone.
