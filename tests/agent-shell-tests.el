@@ -4839,6 +4839,32 @@ instead."
           (should (assq :session-id model))
           (should-not (map-elt model :session-id)))))))
 
+(ert-deftest agent-shell--make-header-model-font-family-test ()
+  "Test `agent-shell-header-font-family' overrides the default face's family."
+  (with-temp-buffer
+    (setq-local agent-shell--state
+                `((:agent-config . ((:buffer-name . "Claude Code")
+                                    (:icon-name . nil)))
+                  (:session . ((:id . "test-session-id")
+                               (:model-id . nil)
+                               (:models . nil)
+                               (:mode-id . nil)
+                               (:modes . nil)))))
+    (cl-letf (((symbol-function 'agent-shell--state)
+               (lambda () agent-shell--state))
+              ((symbol-function 'agent-shell--context-usage-indicator)
+               (lambda () nil))
+              ((symbol-function 'agent-shell--busy-indicator-frame)
+               (lambda () nil)))
+      (let ((agent-shell-header-font-family nil))
+        (should (equal (map-elt (agent-shell--make-header-model agent-shell--state)
+                                :font-family)
+                       (face-attribute 'default :family))))
+      (let ((agent-shell-header-font-family "Inter"))
+        (should (equal (map-elt (agent-shell--make-header-model agent-shell--state)
+                                :font-family)
+                       "Inter"))))))
+
 (ert-deftest agent-shell--make-header-text-includes-session-id-test ()
   "Test `agent-shell--make-header' text mode includes session ID."
   (with-temp-buffer

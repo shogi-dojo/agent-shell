@@ -614,6 +614,13 @@ Can be one of:
                  (const :tag "No header" nil))
   :group 'agent-shell)
 
+(defcustom agent-shell-header-font-family nil
+  "Font family for the graphical header's text.
+nil uses the `default' face's family.  The header is an SVG image, so a
+proportional font set through face remapping does not reach it."
+  :type '(choice (const :tag "Default face's family" nil) string)
+  :group 'agent-shell)
+
 (defcustom agent-shell-show-session-id nil
   "Non-nil to display the session ID in the header and session selection.
 
@@ -6215,7 +6222,8 @@ defaulting to the frame width."
     (:session-id . ,(agent-shell--session-id-indicator))
     (:width . ,(or width (frame-pixel-width)))
     (:font-height . ,(frame-char-height))
-    (:font-family . ,(face-attribute 'default :family))
+    (:font-family . ,(or agent-shell-header-font-family
+                         (face-attribute 'default :family)))
     (:font-size . ,(if-let* (((display-graphic-p))
                              (font (face-attribute 'default :font))
                              ((fontp font))
