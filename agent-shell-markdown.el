@@ -279,6 +279,67 @@ backticks; values are the corresponding Emacs mode prefix (the
 
   (\"elisp\" . \"emacs-lisp\")  ; ```elisp -> emacs-lisp-mode")
 
+(defcustom agent-shell-markdown-source-block-copy-glyph "⧉"
+  "The glyph after a code block's language label; RET or a click copies.
+For example, nerd-icons' octicon copy icon: \"\\uf4bb\"."
+  :type 'string
+  :group 'agent-shell-markdown)
+
+(defcustom agent-shell-markdown-language-guess-function nil
+  "Function that guesses the language of a code block that names none.
+
+Called with the block's code when its fence says nothing about it (see
+`agent-shell-markdown-uninformative-languages'), for example the
+`console' blocks holding a tool call's command and output.  Returns a
+language such as \"js\", or nil to leave the block plain.  The label
+keeps the fence's own name.  `agent-shell-markdown-guess-language' is a
+ready-made guesser:
+
+  (setopt agent-shell-markdown-language-guess-function
+          #\\='agent-shell-markdown-guess-language)"
+  :type '(choice (const :tag "Don't guess" nil) function)
+  :group 'agent-shell-markdown)
+
+(defvar agent-shell-markdown-uninformative-languages
+  '("console" "shell-session" "text" "")
+  "Fence languages that say nothing about a block's code.
+Their blocks go to `agent-shell-markdown-language-guess-function'.")
+
+(defun agent-shell-markdown-guess-language (code)
+  "Return a language for CODE from its shape, or nil when unsure.
+
+A block of up to three lines is a shell command.  Longer ones are
+recognised by a shebang, a diff, JSON, or the opening lines of a
+JavaScript/TypeScript, Python, Nim or Emacs Lisp file.  For example:
+
+  (agent-shell-markdown-guess-language \"git status\")  => \"sh\"
+  (agent-shell-markdown-guess-language \"#!/usr/bin/env node\\n...\")
+  => \"js\""
+  (let ((head (substring code 0 (min (length code) 2000)))
+        (case-fold-search nil))
+    (cond
+     ((string-match-p "\\`#!.*\\_<\\(node\\|deno\\|bun\\)\\_>" head) "js")
+     ((string-match-p "\\`#!.*\\_<python[0-9.]*\\_>" head) "python")
+     ((string-match-p "\\`#!.*\\_<\\(ba\\|z\\)?sh\\_>" head) "sh")
+     ((string-match-p "\\`\\(diff --git \\|--- \\|@@ \\)" head) "diff")
+     ((and (string-match-p "\\`[ \t\n]*[[{]" head)
+           (condition-case nil (and (json-parse-string code) t) (error nil)))
+      "js-json")
+     ((string-match-p (concat "^\\(import .* from \\|export \\(default\\|function\\|const\\|class\\) "
+                              "\\|const [A-Za-z_$][A-Za-z0-9_$]* = \\)")
+                      head)
+      (if (string-match-p "^\\(interface\\|type\\) [A-Z]\\|: \\(string\\|number\\|boolean\\)\\_>"
+                          head)
+          "typescript-ts"
+        "js"))
+     ((string-match-p "^\\(def [a-z_]+(\\|from [a-z_.]+ import \\|class [A-Z][A-Za-z]*.*:$\\)"
+                      head)
+      "python")
+     ((string-match-p "^\\(proc \\|func \\|import std/\\)" head) "nim")
+     ((string-match-p "\\`[ \t\n]*(\\(defun\\|defvar\\|require\\|use-package\\) " head)
+      "emacs-lisp")
+     ((<= (seq-count (lambda (char) (eq char ?\n)) (string-trim code)) 2) "sh"))))
+
 (defvar agent-shell-markdown-render-functions nil
   "Abnormal hook of external renderers, run before the styling passes.
 
@@ -1825,7 +1886,7 @@ with `emacs-lisp-mode' face properties on the body and a
                                        ;; affordance itself (see
                                        ;; `agent-shell-markdown--next-visible-source-block').
                                        (propertize
-                                        "⧉"
+                                        agent-shell-markdown-source-block-copy-glyph
                                         'agent-shell-markdown-source-block-copy t)))
                    (content-start (copy-marker (marker-position body-start) t))
                    (kill-action (lambda ()
@@ -4405,6 +4466,11 @@ fence (e.g. \"python\", \"elisp\").  When the resolved mode is
 loadable, CODE is fontified in a temporary buffer and returned
 with face properties applied.  Otherwise CODE is returned
 unchanged."
+  (when (and agent-shell-markdown-language-guess-function
+             (member (downcase (string-trim (or lang "")))
+                     agent-shell-markdown-uninformative-languages))
+    (setq lang (or (funcall agent-shell-markdown-language-guess-function code)
+                   lang)))
   (if-let* ((mode (agent-shell-markdown--resolve-lang-mode lang))
             ((fboundp mode)))
       (with-temp-buffer

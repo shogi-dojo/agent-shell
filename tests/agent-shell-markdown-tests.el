@@ -4980,6 +4980,41 @@ Searches with `case-fold-search' nil, as
                  '((:tracking-label . "new"))))
   (should-not (agent-shell-markdown--parse-link-attributes "width=50%")))
 
+(ert-deftest agent-shell-markdown-guess-language-recognises-common-shapes ()
+  "Short blocks are commands; longer ones are told apart by their shape."
+  (should (equal (agent-shell-markdown-guess-language "git status") "sh"))
+  (should (equal (agent-shell-markdown-guess-language
+                  "#!/usr/bin/env node\n// builds the server\nrun();\nmore();")
+                 "js"))
+  (should (equal (agent-shell-markdown-guess-language
+                  "import { join } from 'node:path';\nconst a = 1;\nconst b = 2;\nexport default a;")
+                 "js"))
+  (should (equal (agent-shell-markdown-guess-language
+                  "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@")
+                 "diff"))
+  (should (equal (agent-shell-markdown-guess-language
+                  "{\n  \"a\": 1,\n  \"b\": [2, 3]\n}")
+                 "js-json"))
+  (should (equal (agent-shell-markdown-guess-language
+                  "from os import path\n\ndef main():\n    pass")
+                 "python"))
+  (should-not (agent-shell-markdown-guess-language
+               "Building...\nCompiled 3 files\nDone in 2s\nAll good")))
+
+(ert-deftest agent-shell-markdown-highlight-code-guesses-uninformative-languages ()
+  "A `console' block is highlighted as the guessed language, only when asked."
+  (let ((code "const a = 1;\nconst b = 2;\nconst c = 3;\nconst d = 4;"))
+    (let ((agent-shell-markdown-language-guess-function nil))
+      (should-not (next-single-property-change
+                   0 'face (agent-shell-markdown--highlight-code code "console"))))
+    (let ((agent-shell-markdown-language-guess-function
+           #'agent-shell-markdown-guess-language))
+      (should (next-single-property-change
+               0 'face (agent-shell-markdown--highlight-code code "console"))))
+    (let ((agent-shell-markdown-language-guess-function (lambda (_) "js")))
+      ;; A fence that names its language is never second-guessed.
+      (should (equal (agent-shell-markdown--highlight-code "x" "unknown-lang") "x")))))
+
 (provide 'agent-shell-markdown-tests)
 
 ;;; agent-shell-markdown-tests.el ends here
